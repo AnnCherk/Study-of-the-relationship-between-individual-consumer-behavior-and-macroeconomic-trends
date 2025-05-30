@@ -8,9 +8,7 @@ The project focuses on analyzing banking transaction data to study the relations
 ## Authors:
 Anton Kovantsev
 
-ITMO University
-
-Saint Petersburg, Russia
+ITMO University, Saint Petersburg, Russia
 
 Email: ankovantcev@itmo.ru
 
