@@ -20,6 +20,7 @@ def get_inflation_data(dataset_id):
 
 # Calculating consumption activity
 def consumer_acticity(x):
+    """Calculates euclidian norm ||s,s,sr|| in value space"""
     return np.linalg.norm(x)
 
 
@@ -83,7 +84,6 @@ def evaluate_fit(x_data, y_data, model_type, params):
         y_fit = normalize_curve(y_fit, y_data)
     ks_stat, ks_pvalue = ks_2samp(y_data, y_fit)
     wasserstein = wasserstein_distance(y_data, y_fit)
-
     return ks_stat, ks_pvalue, wasserstein
 
 
