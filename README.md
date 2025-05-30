@@ -7,14 +7,18 @@ The project focuses on analyzing banking transaction data to study the relations
 
 ## Authors:
 Anton Kovantsev
+
 ITMO University
+
 Saint Petersburg, Russia
+
 Email: ankovantcev@itmo.ru
 
 
 Anna Cherkasskaya
-ITMO University
-Saint Petersburg, Russia
+
+ITMO University, Saint Petersburg, Russia
+
 Email: anyacherkasskaya@mail.ru
 
 ## Repository Contents
@@ -42,6 +46,7 @@ Libraries: numpy, pandas, scipy, matplotlib, seaborn, statsmodels.
 ### Dataset Descriptions
 1. **First Dataset (dataset_1)**
 **Transactions:** 19,262,668 transactions from 10,000 bank clients.
+
 **Observation Period:** January 1, 2018 – August 15, 2022.
 
 **Columns:**
@@ -59,6 +64,7 @@ Libraries: numpy, pandas, scipy, matplotlib, seaborn, statsmodels.
 
 2. **Second Dataset (dataset_2)**
 **Transactions:** 6,938,421 transactions from 25,000 bank clients.
+
 **Observation Period:** May 1, 2017 – December 31, 2018.
 
 **Columns:**
@@ -87,10 +93,13 @@ Contains all functions used in the analysis:
 - get_inflation_data(dataset_id): Returns inflation data for the specified dataset.
 
 2. **data.py**
+
 Provides inflation data.
 
 3. **modeling_1st_dataset.ipynb**
+
 Analysis of the first dataset with 10K clients. The modified and classical Maxwell-Boltzmann distribution is used as a continuous distribution.
 
 4. **modeling_1st_dataset.ipynb**
+
 Analysis of the first dataset with 25K clients. The modified Maxwell-Boltzmann distribution is used as a continuous distribution.
