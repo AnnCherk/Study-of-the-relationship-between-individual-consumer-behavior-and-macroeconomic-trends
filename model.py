@@ -76,12 +76,14 @@ def compute_metrics(x_empirical, y_empirical, y_model):
 
 # Calculation of theoretical distribution
 def evaluate_fit(x_data, y_data, model_type, params):
-    if model_type=='modified':
+    if model_type == 'modified':
         y_fit = mod_maxwell_boltzmann(x_data, *params)
-        y_fit = normalize_curve(y_fit, y_data)
-    elif model_type=='classical':
+    elif model_type == 'classical':
         y_fit = clas_maxwell_boltzmann(x_data, *params)
-        y_fit = normalize_curve(y_fit, y_data)
+    else:
+        raise ValueError("Invalid model_type")
+
+    y_fit = normalize_curve(y_fit, y_data)
     ks_stat, ks_pvalue = ks_2samp(y_data, y_fit)
     wasserstein = wasserstein_distance(y_data, y_fit)
     return ks_stat, ks_pvalue, wasserstein
@@ -89,20 +91,51 @@ def evaluate_fit(x_data, y_data, model_type, params):
 
 # Fits a model to data using one of two methods: MLE or MLS
 # It returns the optimal parameters for the model based on the chosen method.
-def fit_methods(x_data, y_data, method):
-    initial_params = [0.1, 0.1, 0, 2]
-    bounds = [(1e-6, None), (1e-6, None), (None, None), (0, None)]
+def fit_methods(x_data, y_data, method, model_type='modified'):
+    if model_type == 'modified':
+        initial_params = [0.1, 0.1, 0, 2]
+        bounds = [(1e-6, None), (1e-6, None), (None, None), (0, None)]
+        model_func = mod_maxwell_boltzmann
+    elif model_type == 'classical':
+        initial_params = [0.1, 0.1]
+        bounds = [(1e-6, None), (1e-6, None)]
+        model_func = clas_maxwell_boltzmann
+    else:
+        raise ValueError("Invalid model_type")
+
     if method == 'mle':
-        result = minimize(neg_log_likelihood, initial_params, args=(x_data, y_data),
-                          method='L-BFGS-B', bounds=bounds)
+        if model_type == 'modified':
+            def neg_ll(params):
+                return neg_log_likelihood(params, x_data, y_data)
+        else:
+            def neg_ll(params):
+                y_model = clas_maxwell_boltzmann(x_data, *params)
+                y_model = np.clip(y_model, 1e-10, None)
+                return -np.sum(y_data * np.log(y_model / np.sum(y_model)))
+
+        result = minimize(neg_ll, initial_params, method='L-BFGS-B', bounds=bounds)
         params = result.x
+
     elif method == 'mls':
         try:
-            params, _ = curve_fit(mod_maxwell_boltzmann, x_data, y_data, p0=initial_params, bounds=(
-                [1e-6, 1e-6, -np.inf, 0], [np.inf, np.inf, np.inf, np.inf]), maxfev=5000)
+            params, _ = curve_fit(
+                model_func,
+                x_data,
+                y_data,
+                p0=initial_params,
+                bounds=(
+                    [b[0] if b[0] is not None else -np.inf for b in bounds],
+                    [b[1] if b[1] is not None else np.inf for b in bounds]
+                ),
+                maxfev=5000
+            )
         except RuntimeError:
-            params = [np.nan, np.nan, np.nan, np.nan] 
+            params = [np.nan] * len(initial_params)
+    else:
+        raise ValueError("Invalid method")
+
     return params
+
 
 
 # Computes RMSE
@@ -110,8 +143,7 @@ def compute_rmse(y_true, y_pred):
     return np.sqrt(np.mean((y_true - y_pred) ** 2))
 
 # Process data for a single date
-def calc_distr_params(individual, date, model_type):
-    """
+"""
     Parameters:
     individual (pd.DataFrame): The original data with a multi-index ['date', 'client'].
     date (str): The date to process.
@@ -119,14 +151,14 @@ def calc_distr_params(individual, date, model_type):
 
     Returns:
     pd.DataFrame: A DataFrame with the results for the given date.
-    """
+"""
+def calc_distr_params(individual, date, model_type='modified'):
     try:
         data = individual.loc[date]
     except KeyError:
         print(f"Date {date} is missing.")
         return pd.DataFrame()
 
-    # Calculating consumption activity
     b = data.apply(lambda x: consumer_acticity(x), axis=1)
 
     if b.empty or b.isna().all():
@@ -139,39 +171,37 @@ def calc_distr_params(individual, date, model_type):
         print(f"Error creating histogram for {date}: {e}")
         return pd.DataFrame()
 
-    # Extract x_data and y_data
     x_data = np.array([(edge.left + edge.right) / 2 for edge in b.index])
     y_data = np.array(b.values)
     y_data = y_data / np.sum(y_data)
 
     results = []
 
-    # Maximum Likelihood Estimation
-    try:
-        mle_params = fit_methods(x_data, y_data, method='mle')
-        if not np.isnan(mle_params).any():
-            mle_ks, mle_p, mle_wd = evaluate_fit(x_data, y_data, model_type, mle_params)
-            y_pred_mle = mod_maxwell_boltzmann(x_data, *mle_params)
-            mle_rmse = compute_rmse(y_data, y_pred_mle)
-            results.append([date, *mle_params, 'mle', mle_ks, mle_p, mle_wd, mle_rmse])
-    except Exception as e:
-        print(f"Error while fitting MLE for {date}: {e}")
+    for method in ['mle', 'mls']:
+        try:
+            params = fit_methods(x_data, y_data, method=method, model_type=model_type)
+            if np.isnan(params).any():
+                continue
+            ks, p, wd = evaluate_fit(x_data, y_data, model_type, params)
 
-    # Ordinary Least Squares (MLS)
-    try:
-        mls_params = fit_methods(x_data, y_data, method='mls')
-        if not np.isnan(mls_params).any():
-            mls_ks, mls_p, mls_wd = evaluate_fit(x_data, y_data, model_type, mls_params)
-            y_pred_mls = mod_maxwell_boltzmann(x_data, *mls_params)
-            mls_rmse = compute_rmse(y_data, y_pred_mls)
-            results.append([date, *mls_params, 'mls', mls_ks, mls_p, mls_wd, mls_rmse])
-    except Exception as e:
-        print(f"Error while fitting MLS for {date}: {e}")
+            if model_type == 'modified':
+                B, beta, x0, alpha = params
+            else:
+                B, beta = params
+                x0, alpha = None, None
 
-    # Creating DataFrame with results
+            y_pred = mod_maxwell_boltzmann(x_data, *params) if model_type == 'modified' \
+                else clas_maxwell_boltzmann(x_data, *params)
+            rmse = compute_rmse(y_data, y_pred)
+
+            results.append([date, B, beta, x0, alpha, method, ks, p, wd, rmse])
+        except Exception as e:
+            print(f"Error while fitting {method.upper()} for {date}: {e}")
+
     columns = ['date', 'B', 'beta', 'x0', 'alpha', 'method', 'ks_statistic', 'p_value', 'wasserstein_distance', 'rmse']
-    results_df = pd.DataFrame(results, columns=columns)
-    return results_df
+    return pd.DataFrame(results, columns=columns)
+
+
 
 
 # Creates graphs for each metric
@@ -247,5 +277,4 @@ def analyze_results(results_df):
     summary['p_value_variation'] = summary['p_value_std'] / summary['p_value_mean']
     summary['wasserstein_distance_variation'] = summary['wasserstein_distance_std'] / summary['wasserstein_distance_mean']
     summary['rmse_variation'] = summary['rmse_std'] / summary['rmse_mean']
-    print(summary)
     return summary
